@@ -2,32 +2,52 @@ import { defineStore } from "pinia"
 import { ref, computed } from "vue"
 import api from "@/plugin/axios"
 
-export const useAuthStore = defineStore("auth", ()=>{
-    const user = ref({
-        user: null,
-        token: null
-    });
+const usuarioSalvo = () => {
+    try{
+        return JSON.parse(localStorage.getItem("usuario"));
+    }catch{
+        return null;
+    }
+}
 
-    const isAuthenticated = computed(() => !!user.value.token);
+export const useAuthStore = defineStore("auth", ()=>{
+    const usuario = ref(usuarioSalvo());
+    const token = ref(localStorage.getItem("token"));
+
+    const isAuthenticated = computed(() => !!token.value);
+
+    const salvarSessao = (dados) => {
+        usuario.value = dados.user;
+        token.value = dados.token;
+        localStorage.setItem("token", dados.token);
+        localStorage.setItem("usuario", JSON.stringify(dados.user));
+    }
+
+    const limparSessao = () => {
+        usuario.value = null;
+        token.value = null;
+        localStorage.removeItem("token");
+        localStorage.removeItem("usuario");
+    }
 
     const login = async (email, password) => {
+        const response = await api.post("/login", {email, password});
+        salvarSessao(response.data);
+    }
+
+    //Cadastro: a API já devolve o token, então o usuário entra direto
+    const register = async (dados) => {
+        const response = await api.post("/register", dados);
+        salvarSessao(response.data);
+    }
+
+    const logout = async () => {
         try{
-            const response = await api.post("/login", {email, password});
-            user.value.user = response.data.user;
-            user.value.token = response.data.token;
-            localStorage.setItem("token", response.data.token);
-            localStorage.setItem("idusuario", response.data.user.id);
-        }catch(error){
-            console.log("Erro ao logar", error);
-            throw error;
+            await api.post("/logout");
+        }finally{
+            limparSessao();
         }
     }
 
-    const logout = () => {
-        user.value.user = null;
-        user.value.token = null;
-        localStorage.removeItem("token");
-    }
-
-    return { user, isAuthenticated, login, logout }
+    return { usuario, token, isAuthenticated, login, register, logout }
 });
