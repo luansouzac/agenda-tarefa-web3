@@ -1,46 +1,74 @@
 <script setup>
-    import { ref, watch } from 'vue';
+    import { computed, ref, watch } from 'vue';
     import { useCategoriaStore } from '@/stores/categoria';
+    import { useNotificacaoStore } from '@/stores/notificacao';
+    import { mensagemErro } from '@/utils/erros';
 
-    //Propriedade
+    const aberto = defineModel({ type: Boolean });
+
+    //Propriedade: categoria a editar (vazia = nova)
     const props = defineProps(['categoria']);
 
     const item = ref({
         idcategoria: '',
         descricao: ''
     });
+    const salvando = ref(false);
+    const editando = computed(() => !!item.value.idcategoria);
 
     const storeCategoria = useCategoriaStore();
+    const notificacao = useNotificacaoStore();
 
-    const cancelar = () => {
-        item.value.idcategoria = '';
-        item.value.descricao = '';
-    }
+    //Ao abrir, carrega a categoria recebida (ou limpa para uma nova)
+    watch(aberto, (valor) => {
+        if(!valor) return;
+        item.value = props.categoria?.idcategoria
+            ? { ...props.categoria }
+            : { idcategoria: '', descricao: '' };
+    }, {immediate: true});
 
-    const salvar = () => {
+    const obrigatorio = v => !!v?.trim() || 'Campo obrigatório';
+
+    const salvar = async (event) => {
+        const { valid } = await event;
+        if(!valid) return;
+
+        salvando.value = true;
         try{
-            if(item.value.idcategoria==''){
-                storeCategoria.insertCategoria(item.value);
+            if(editando.value){
+                await storeCategoria.updateCategoria(item.value);
+                notificacao.sucesso('Categoria alterada');
             }else{
-                storeCategoria.updateCategoria(item.value);
+                await storeCategoria.insertCategoria(item.value);
+                notificacao.sucesso('Categoria adicionada');
             }
-            cancelar();
-            alert('Operação realizada com sucesso!');
+            aberto.value = false;
         }catch(error) {
-            console.log('Erro ao cadastrar a categoria', error);
+            notificacao.erro(mensagemErro(error, 'Erro ao salvar a categoria'));
+        }finally{
+            salvando.value = false;
         }
     }
-
-    watch(() => props.categoria, (categoria)=>{
-        item.value = { ...categoria };
-    }, {immediate: true});
 </script>
 
 <template>
-    <form @submit.prevent="salvar">
-        <label for="categoria">Categoria</label>
-        <input type="text" id="categoria" v-model="item.descricao"><br>
-        <input type="submit" value="Salvar">
-        <input type="button" value="Cancelar" @click="cancelar">
-    </form>
+    <v-dialog v-model="aberto" max-width="420">
+        <v-card rounded="xl" class="pa-4">
+            <v-card-title class="text-h6 font-weight-bold">
+                {{ editando ? 'Editar categoria' : 'Nova categoria' }}
+            </v-card-title>
+            <v-card-text>
+                <v-form @submit.prevent="salvar" id="form-categoria">
+                    <v-text-field v-model="item.descricao" label="Nome da categoria"
+                        :rules="[obrigatorio]" autofocus />
+                </v-form>
+            </v-card-text>
+            <v-card-actions>
+                <v-spacer />
+                <v-btn variant="text" @click="aberto = false">Cancelar</v-btn>
+                <v-btn type="submit" form="form-categoria" color="primary" variant="flat" rounded="lg"
+                    :loading="salvando">Salvar</v-btn>
+            </v-card-actions>
+        </v-card>
+    </v-dialog>
 </template>
