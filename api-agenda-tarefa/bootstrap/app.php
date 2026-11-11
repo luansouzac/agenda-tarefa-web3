@@ -12,8 +12,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // API não tem página de login: visitante sem token recebe 401
+        $middleware->redirectGuestsTo(
+            fn ($request) => $request->is('api/*') ? null : '/');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // Rotas da API sempre respondem em JSON (ex.: 401 sem token)
+        $exceptions->shouldRenderJsonWhen(
+            fn ($request) => $request->is('api/*'));
     })->create();
