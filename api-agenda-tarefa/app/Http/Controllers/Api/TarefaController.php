@@ -8,23 +8,45 @@ use Illuminate\Http\Request;
 
 class TarefaController extends Controller
 {
-   public function index()
+    private function regras(){
+        return [
+            'idcategoria' => 'required|exists:categorias,idcategoria',
+            'descricao' => 'required|string',
+            'data' => 'required|date',
+            'cumprida' => 'boolean'
+        ];
+    }
+
+    //Busca apenas tarefas do usuário logado
+    private function buscar(Request $request, string $id){
+        return Tarefa::with('categoria')
+            ->where('idusuario', $request->user()->id)
+            ->find($id);
+    }
+
+    public function index(Request $request)
     {
         return response()->json(
-            Tarefa::with(['categoria', 
-                'user'])->get(), 200);
+            Tarefa::with('categoria')
+                ->where('idusuario', $request->user()->id)
+                ->orderBy('data')
+                ->get(), 200);
     }
 
     public function store(Request $request)
     {
-        $item = Tarefa::create($request->all());
+        $dados = $request->validate($this->regras());
+        $dados['idusuario'] = $request->user()->id;
+        $dados['cumprida'] = $dados['cumprida'] ?? false;
+
+        $item = Tarefa::create($dados);
         $item->load(['categoria']);
         return response()->json($item, 201);
     }
 
-    public function show(string $id)
+    public function show(Request $request, string $id)
     {
-        $item = Tarefa::find($id)::with('categoria')->get();
+        $item = $this->buscar($request, $id);
         if($item){
             return response()->json($item, 200);
         }
@@ -34,18 +56,19 @@ class TarefaController extends Controller
 
     public function update(Request $request, string $id)
     {
-        $item = Tarefa::with('categoria')->get()->find($id);
+        $item = $this->buscar($request, $id);
         if($item){
-            $item->update($request->all());
+            $item->update($request->validate($this->regras()));
+            $item->load('categoria');
             return response()->json($item, 200);
         }
         return response()->json(
             ['erro'=>'Registro não encontrado'], 404);
     }
 
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
-        $item = Tarefa::find($id);
+        $item = $this->buscar($request, $id);
         if($item){
             $item->delete();
             return response()->json($item, 200);
